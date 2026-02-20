@@ -8,7 +8,7 @@ import {
 	EmbedBuilder,
 	type APIApplicationCommand
 } from 'discord.js';
-import { drizzle } from 'drizzle-orm/pg-proxy';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { createPgNativeClient } from '$lib/server/db/pg';
 import * as schema from '$lib/server/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -24,13 +24,7 @@ if (!env.DATABASE_URL) {
 }
 
 const nativeClient = createPgNativeClient(env.DATABASE_URL);
-export const db = drizzle(
-	async (sql, params) => {
-		const rows = await nativeClient.query(sql, params ?? []);
-		return { rows };
-	},
-	{ schema }
-);
+export const db = drizzle(nativeClient, { schema });
 
 type DiscordEnv = {
 	token?: string;

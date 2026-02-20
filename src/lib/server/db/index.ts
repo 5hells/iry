@@ -1,6 +1,6 @@
-import { drizzle } from 'drizzle-orm/pg-proxy';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import * as schema from './schema';
-import { createPgNativeClient } from './pg';
 import 'dotenv/config';
 
 export * from './auth.schema';
@@ -10,12 +10,6 @@ if (!env.DATABASE_URL) {
 	throw new Error('DATABASE_URL is not set');
 }
 
-const nativeClient = createPgNativeClient(env.DATABASE_URL);
+const pool = new Pool({ connectionString: env.DATABASE_URL });
 
-export const db = drizzle(
-	async (sql, params) => {
-		const rows = await nativeClient.query(sql, params ?? []);
-		return { rows };
-	},
-	{ schema }
-);
+export const db = drizzle(pool, { schema });

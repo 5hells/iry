@@ -1,4 +1,4 @@
-import { drizzle } from 'drizzle-orm/pg-proxy';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { createPgNativeClient } from '../src/lib/server/db/pg';
 import * as schema from '../src/lib/server/db/schema';
 import 'dotenv/config';
@@ -8,13 +8,7 @@ const { perk } = schema;
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
 const nativeClient = createPgNativeClient(process.env.DATABASE_URL);
-const db = drizzle(
-	async (sql, params) => {
-		const rows = await nativeClient.query(sql, params ?? []);
-		return { rows };
-	},
-	{ schema }
-);
+const db = drizzle(nativeClient, { schema });
 
 async function seedPerks() {
 	console.log('Seeding perks...');

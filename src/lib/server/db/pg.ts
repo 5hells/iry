@@ -1,33 +1,24 @@
 import { Client } from 'pg';
+import type { QueryResult, QueryConfig, QueryConfigValues, QueryResultRow } from 'pg';
 
-type PgRow = Record<string, unknown>;
-
-export type PgNativeQueryClient = {
-	query: <TRow extends PgRow = PgRow>(sql: string, params?: unknown[]) => Promise<TRow[]>;
-	end: () => Promise<void>;
-};
-
-export function createPgNativeClient(connectionString: string): PgNativeQueryClient {
+export function createPgNativeClient(connectionString: string) {
 	const client = new Client({ connectionString });
 	let connected = false;
 
-	const ensureConnected = async () => {
+	async function connect() {
 		if (!connected) {
 			await client.connect();
 			connected = true;
 		}
-	};
+	}
 
-	return {
-		query: async <TRow extends PgRow = PgRow>(sql: string, params: unknown[] = []): Promise<TRow[]> => {
-			await ensureConnected();
-			const res = await client.query(sql, params as any[]);
-			return (res.rows as unknown) as TRow[];
-		},
-		end: async () => {
-			if (!connected) return;
-			await client.end();
-			connected = false;
-		}
-	};
+	client.query = (async <R extends QueryResultRow = unknown, I extends unknown[] = unknown[]>(
+		query: string | QueryConfig<I>,
+		params?: QueryConfigValues<I>
+	): Promise<QueryResult<R>> => {
+		await connect();
+		return client.query(query, params);
+	}) as unknown as typeof client.query;
+
+	return client;
 }

@@ -1,0 +1,20 @@
+ALTER TABLE "album_review" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "album_review_like" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "blocked_user" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "blocked_user" ALTER COLUMN "blocked_user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "collection" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "collection_collaborator" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "direct_message" ALTER COLUMN "sender_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "direct_message" ALTER COLUMN "recipient_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "direct_message_like" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "lastfm_scrobble" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "notification" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "notification" ALTER COLUMN "from_user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "review_collaborator" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "status_post" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "status_post_comment" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "status_post_comment_like" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "status_post_like" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "user_perk" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "user_points" ALTER COLUMN "user_id" SET DATA TYPE text;--> statement-breakpoint
+ALTER TABLE "user_theme" ALTER COLUMN "user_id" SET DATA TYPE text;

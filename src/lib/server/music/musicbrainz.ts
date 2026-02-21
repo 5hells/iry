@@ -30,7 +30,7 @@ async function fetchMusicBrainz(endpoint: string, params: Record<string, string>
 	}
 
 	const headers: Record<string, string> = {
-		'User-Agent': 'IryMusicApp/1.0.0 ( contact@example.com )',
+		'User-Agent': 'Iry/1.0 ( us@hellings.cc )',
 		Accept: 'application/json'
 	};
 

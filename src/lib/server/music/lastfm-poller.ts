@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { user, lastfmScrobble } from '../db/schema';
-import { eq, desc, and, gte, lte, isNotNull, ne } from 'drizzle-orm';
+import { eq, and, gte, lte, isNotNull, ne } from 'drizzle-orm';
 import { getRecentTracks, getNowPlaying } from './lastfm';
 
 const nowPlayingState = new Map<string, any>();
@@ -9,6 +9,7 @@ const listeners = new Set<(data: any) => void>();
 const POLL_INTERVAL = 30000;
 
 let pollingInterval: NodeJS.Timeout | null = null;
+let pollInProgress = false;
 
 export function subscribe(callback: (data: any) => void) {
 	listeners.add(callback);
@@ -31,6 +32,12 @@ function broadcast(data: any) {
 }
 
 async function pollLastFM() {
+	if (pollInProgress) {
+		return;
+	}
+
+	pollInProgress = true;
+
 	try {
 		const users = await db
 			.select()
@@ -93,6 +100,11 @@ async function pollLastFM() {
 					if (!track.timestamp || track.timestamp <= 0) {
 						continue;
 					}
+
+					const scrobbleTime = new Date(track.timestamp);
+					const timeWindowStart = new Date(scrobbleTime.getTime() - 2000);
+					const timeWindowEnd = new Date(scrobbleTime.getTime() + 2000);
+
 					const existing = await db
 						.select()
 						.from(lastfmScrobble)
@@ -101,7 +113,9 @@ async function pollLastFM() {
 								eq(lastfmScrobble.userId, u.id),
 								eq(lastfmScrobble.artist, track.artist),
 								eq(lastfmScrobble.track, track.track),
-								gte(lastfmScrobble.timestamp, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)) 
+								eq(lastfmScrobble.nowPlaying, false),
+								gte(lastfmScrobble.timestamp, timeWindowStart),
+								lte(lastfmScrobble.timestamp, timeWindowEnd)
 							)
 						)
 						.limit(1);
@@ -113,7 +127,7 @@ async function pollLastFM() {
 							track: track.track,
 							album: track.album || null,
 							albumArtUrl: track.albumArtUrl || null,
-							timestamp: new Date(track.timestamp),
+							timestamp: scrobbleTime,
 							nowPlaying: false
 						});
 					}
@@ -124,6 +138,8 @@ async function pollLastFM() {
 		}
 	} catch (err) {
 		console.error('Error polling LastFM:', err);
+	} finally {
+		pollInProgress = false;
 	}
 }
 

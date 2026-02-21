@@ -93,6 +93,7 @@ export const GET: RequestHandler = async ({ params }) => {
 					const mediaTracks = media.tracks || [];
 					const sideLetter = String.fromCharCode(65 + mediaIndex); // 0->A, 1->B
 					return mediaTracks.map((track: any, localIdx: number) => {
+						const title = track.title || track.recording?.title || '';
 						let pos: string | null = null;
 						if (track.number && String(track.number).trim() !== '') {
 							pos = String(track.number);
@@ -103,7 +104,7 @@ export const GET: RequestHandler = async ({ params }) => {
 						}
 						const mapped = {
 							id: track.recording?.id || track.id,
-							title: track.title,
+							title,
 							duration: track.length ? Math.floor(track.length / 1000) : null,
 
 							trackNumber: fallbackTrackIndex,

@@ -138,12 +138,15 @@ function extractMusicBrainzTracks(mbRelease: any): Array<{
 		for (let localIdx = 0; localIdx < media.tracks.length; localIdx++) {
 			const t = media.tracks[localIdx];
 			const musicbrainzId = t.recording?.id || t.id;
+			const title = t.title || t.recording?.title || null;
 			const duration = t.length || t.recording?.length || null;
 
-			if (musicbrainzId && t.title) {
+			if (musicbrainzId && title) {
 				let position: string | null = null;
 				if (t.number && String(t.number).trim() !== '') {
 					position = String(t.number);
+				} else if (t.position && String(t.position).trim() !== '') {
+					position = String(t.position).trim();
 				} else {
 					const sideLetter = String.fromCharCode(65 + mediaIndex);
 					const within =
@@ -153,7 +156,7 @@ function extractMusicBrainzTracks(mbRelease: any): Array<{
 					position = `${sideLetter}${within}`;
 				}
 				allTracks.push({
-					title: t.title,
+					title,
 
 					trackNumber: globalTrackIndex,
 					durationMs: duration,
@@ -342,14 +345,31 @@ export async function indexAlbumFromMusicBrainz(musicbrainzId: string) {
 		}
 	}
 
-	const mbRelease = await musicbrainz.getRelease(musicbrainzId);
+	let mbRelease = await musicbrainz.getRelease(musicbrainzId);
+	if (!mbRelease) {
+		const preferredRelease = await musicbrainz.getPreferredReleaseFromReleaseGroup(musicbrainzId);
+		if (preferredRelease?.id) {
+			mbRelease = await musicbrainz.getRelease(preferredRelease.id);
+		}
+	}
 	if (!mbRelease) {
 		throw new Error('Release not found on MusicBrainz');
 	}
 
+	const resolvedReleaseId = mbRelease.id;
+
+	if (musicbrainzId !== resolvedReleaseId) {
+		const existingResolved = await db.query.album.findFirst({
+			where: eq(album.musicbrainzId, resolvedReleaseId)
+		});
+		if (existingResolved) {
+			return existingResolved;
+		}
+	}
+
 	const artistName = musicbrainz.formatArtistCredit(mbRelease['artist-credit']);
 
-	const coverArtInfo = await musicbrainz.getCoverArtWithFallback(musicbrainzId, {
+	const coverArtInfo = await musicbrainz.getCoverArtWithFallback(resolvedReleaseId, {
 		artist: artistName,
 		album: mbRelease.title
 	});
@@ -382,14 +402,14 @@ export async function indexAlbumFromMusicBrainz(musicbrainzId: string) {
 		const inserted = await db
 			.insert(album)
 			.values({
-				musicbrainzId: mbRelease.id,
+				musicbrainzId: resolvedReleaseId,
 				title: mbRelease.title,
 				artist: artistName,
 				releaseDate: mbRelease.date,
 				coverArtUrl: coverArtUrl,
 				genres: JSON.stringify(genres),
 				totalTracks: mbRelease['track-count'] || 0,
-				musicbrainzUrl: `https://musicbrainz.org/release/${mbRelease.id}`
+				musicbrainzUrl: `https://musicbrainz.org/release/${resolvedReleaseId}`
 			})
 			.onConflictDoNothing({ target: album.musicbrainzId })
 			.returning();
@@ -397,7 +417,7 @@ export async function indexAlbumFromMusicBrainz(musicbrainzId: string) {
 		newAlbum =
 			inserted[0] ||
 			(await db.query.album.findFirst({
-				where: eq(album.musicbrainzId, musicbrainzId)
+				where: eq(album.musicbrainzId, resolvedReleaseId)
 			}));
 	}
 

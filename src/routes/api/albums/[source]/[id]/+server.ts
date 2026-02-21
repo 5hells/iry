@@ -249,16 +249,32 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 					if (externalDetails.media && externalDetails.media.length > 0) {
 						let globalIndex = 1;
 						const values: any[] = [];
-						for (const media of externalDetails.media) {
+						for (const [mediaIndex, media] of externalDetails.media.entries()) {
 							const mediaTracks = media.tracks || [];
 							for (const t of mediaTracks) {
+								const title = t.title || t.recording?.title;
+								if (!title) {
+									globalIndex++;
+									continue;
+								}
+
+								let position: string | null = null;
+								if (t.number && String(t.number).trim() !== '') {
+									position = String(t.number);
+								} else if (t.position && String(t.position).trim() !== '') {
+									position = String(t.position).trim();
+								} else {
+									const sideLetter = String.fromCharCode(65 + mediaIndex);
+									position = `${sideLetter}${globalIndex}`;
+								}
+
 								values.push({
 									musicbrainzId: t.recording?.id || t.id,
 									albumId,
-									title: t.title,
+									title,
 									durationMs: t.length || t.recording?.length || null,
 									trackNumber: globalIndex,
-									position: t.position ? String(t.position) : null
+									position
 								});
 								globalIndex++;
 							}

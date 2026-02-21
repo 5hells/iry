@@ -125,7 +125,13 @@ async function ensureAlbumTracksForReview(
 	try {
 		if (source === 'musicbrainz') {
 			const musicbrainzId = dbAlbum.musicbrainzId || requestedAlbumId;
-			const release = await musicbrainz.getRelease(musicbrainzId);
+			let release = await musicbrainz.getRelease(musicbrainzId);
+			if (!release) {
+				const preferredRelease = await musicbrainz.getPreferredReleaseFromReleaseGroup(musicbrainzId);
+				if (preferredRelease?.id) {
+					release = await musicbrainz.getRelease(preferredRelease.id);
+				}
+			}
 			const releaseTracks = release?.media?.flatMap((media: any) => media.tracks || []) || [];
 
 			if (releaseTracks.length > 0) {
@@ -133,13 +139,21 @@ async function ensureAlbumTracksForReview(
 				await db
 					.insert(track)
 					.values(
-						releaseTracks.map((trackRow: any) => ({
-							musicbrainzId: trackRow.recording?.id || trackRow.id,
-							albumId: dbAlbum.id,
-							title: trackRow.title,
-							durationMs: trackRow.length || trackRow.recording?.length || null,
-							trackNumber: trackIndex++
-						}))
+						releaseTracks
+							.map((trackRow: any) => ({
+								musicbrainzId: trackRow.recording?.id || trackRow.id,
+								albumId: dbAlbum.id,
+								title: trackRow.title || trackRow.recording?.title,
+								durationMs: trackRow.length || trackRow.recording?.length || null,
+								trackNumber: trackIndex++,
+								position:
+									trackRow.number && String(trackRow.number).trim() !== ''
+										? String(trackRow.number)
+										: trackRow.position
+											? String(trackRow.position)
+											: null
+							}))
+							.filter((trackRow: any) => !!trackRow.title)
 					)
 					.onConflictDoNothing({ target: track.musicbrainzId });
 			}
@@ -382,16 +396,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					if (mbRelease.media && mbRelease.media.length > 0) {
 						const tracks = mbRelease.media.flatMap((media) => media.tracks || []);
 						if (tracks.length > 0) {
+							let trackIndex = 1;
 							await db
 								.insert(track)
 								.values(
-									tracks.map((t: any) => ({
+									tracks
+										.map((t: any) => ({
 										musicbrainzId: t.recording?.id || t.id,
 										albumId: albumIdFromDb,
-										title: t.title,
+											title: t.title || t.recording?.title,
 										durationMs: t.length || t.recording?.length || null,
-										trackNumber: t.position
-									}))
+											trackNumber: Number.parseInt(String(t.position || ''), 10) || trackIndex++,
+											position:
+												t.number && String(t.number).trim() !== ''
+													? String(t.number)
+													: t.position
+														? String(t.position)
+														: null
+										}))
+										.filter((t: any) => !!t.title)
 								)
 								.onConflictDoNothing({ target: track.musicbrainzId });
 						}

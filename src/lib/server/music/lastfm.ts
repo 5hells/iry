@@ -1,7 +1,7 @@
 import LastFMPackage from 'lastfm-typed';
 import { db } from '$lib/server/db';
 import { lastfmScrobble, user } from '$lib/server/db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, gte, lte } from 'drizzle-orm';
 import dotenv from 'dotenv';
 
 dotenv.config({
@@ -98,6 +98,52 @@ export async function getNowPlaying(username: string): Promise<LastFMTrack | nul
 	return tracks.length > 0 && tracks[0].nowPlaying ? tracks[0] : null;
 }
 
+export async function insertScrobbleIfMissing(input: {
+	userId: string;
+	artist: string;
+	track: string;
+	album?: string | null;
+	albumArtUrl?: string | null;
+	timestamp: Date;
+	nowPlaying?: boolean;
+	timestampToleranceMs?: number;
+}) {
+	const toleranceMs = Math.max(0, input.timestampToleranceMs ?? 2000);
+	const from = new Date(input.timestamp.getTime() - toleranceMs);
+	const to = new Date(input.timestamp.getTime() + toleranceMs);
+	const nowPlaying = input.nowPlaying ?? false;
+
+	const existing = await db.query.lastfmScrobble.findFirst({
+		where: and(
+			eq(lastfmScrobble.userId, input.userId),
+			eq(lastfmScrobble.artist, input.artist),
+			eq(lastfmScrobble.track, input.track),
+			eq(lastfmScrobble.nowPlaying, nowPlaying),
+			gte(lastfmScrobble.timestamp, from),
+			lte(lastfmScrobble.timestamp, to)
+		)
+	});
+
+	if (existing) {
+		return existing;
+	}
+
+	const inserted = await db
+		.insert(lastfmScrobble)
+		.values({
+			userId: input.userId,
+			artist: input.artist,
+			track: input.track,
+			album: input.album || null,
+			albumArtUrl: input.albumArtUrl || null,
+			timestamp: input.timestamp,
+			nowPlaying
+		})
+		.returning();
+
+	return inserted[0] ?? null;
+}
+
 export async function indexUserLastFM(userId: string, username: string, limit: number = 200) {
 	await db.update(user).set({ lastfmUsername: username }).where(eq(user.id, userId));
 
@@ -110,15 +156,18 @@ export async function indexUserLastFM(userId: string, username: string, limit: n
 
 	for (const track of tracks) {
 		try {
-			await db.insert(lastfmScrobble).values({
+			const timestamp =
+				track.timestamp && track.timestamp > 0 ? new Date(track.timestamp) : new Date();
+
+			await insertScrobbleIfMissing({
 				userId,
 				artist: track.artist,
 				track: track.track,
-				album: track.album,
-				albumArtUrl: track.albumArtUrl,
-
-				timestamp: track.timestamp && track.timestamp > 0 ? new Date(track.timestamp) : new Date(),
-				nowPlaying: track.nowPlaying || false
+				album: track.album || null,
+				albumArtUrl: track.albumArtUrl || null,
+				timestamp,
+				nowPlaying: track.nowPlaying || false,
+				timestampToleranceMs: track.nowPlaying ? 15000 : 2000
 			});
 		} catch (err) {}
 	}

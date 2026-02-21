@@ -20,7 +20,6 @@ async function main() {
     for (const u of updates) {
         try {
             await db.update(artist).set({ name: u.newName }).where(eq(artist.id, u.id));
-            // also update any album rows that reference the old name exactly
             await db.update(album).set({ artist: u.newName }).where(eq(album.artist, u.oldName));
         } catch (err) {
             console.error('failed to update artist', u.id, err);

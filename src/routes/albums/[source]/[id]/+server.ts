@@ -20,7 +20,10 @@ export const GET: RequestHandler = async ({ params }) => {
             if (!found) found = await indexAlbumFromDiscogs(id);
         } else if (source === 'musicbrainz') {
             found = await db.query.album.findFirst({ where: eq(album.musicbrainzId, id) });
-            if (!found) found = await indexAlbumFromMusicBrainz(id);
+            const canonical = await indexAlbumFromMusicBrainz(id);
+            if (canonical) {
+                found = canonical;
+            }
         } else {
             
             found = await db.query.album.findFirst({ where: eq(album.id, id) });

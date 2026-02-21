@@ -389,14 +389,18 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 		if (!dbAlbum.tracks || dbAlbum.tracks.length === 0) {
 			try {
+				let resolvedAlbumId = dbAlbum.id;
 				if (dbAlbum && 'musicbrainzId' in dbAlbum && (dbAlbum as any).musicbrainzId) {
-					await indexAlbumFromMusicBrainz((dbAlbum as any).musicbrainzId);
+					const indexedAlbum = await indexAlbumFromMusicBrainz((dbAlbum as any).musicbrainzId);
+					if (indexedAlbum?.id) {
+						resolvedAlbumId = indexedAlbum.id;
+					}
 				} else if (dbAlbum && 'discogsId' in dbAlbum && (dbAlbum as any).discogsId) {
 					await indexAlbumFromDiscogs((dbAlbum as any).discogsId);
 				}
 
 				let refreshed = await db.query.album.findFirst({
-					where: eq(album.id, dbAlbum.id),
+					where: eq(album.id, resolvedAlbumId),
 					with: {
 						reviews: {
 							with: {
@@ -422,7 +426,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 					if (spotifyMatches.length > 0) {
 						await indexAlbumFromSpotify(spotifyMatches[0].id);
 						refreshed = await db.query.album.findFirst({
-							where: eq(album.id, dbAlbum.id),
+							where: eq(album.id, resolvedAlbumId),
 							with: {
 								reviews: {
 									with: {

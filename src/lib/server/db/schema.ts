@@ -37,6 +37,9 @@ export const album = pgTable(
 		genres: text('genres'),
 		totalTracks: integer('total_tracks'),
 
+		indexRetryCount: integer('index_retry_count').notNull().default(0),
+		nextIndexAttempt: timestamp('next_index_attempt', { withTimezone: true }),
+
 		musicbrainzUrl: text('musicbrainz_url'),
 		spotifyUri: text('spotify_uri'),
 		discogsUrl: text('discogs_url'),
@@ -75,6 +78,9 @@ export const artist = pgTable(
 		discogsUrl: text('discogs_url'),
 
 		pinnedReviewId: uuid('pinned_review_id'),
+
+		indexRetryCount: integer('index_retry_count').notNull().default(0),
+		nextIndexAttempt: timestamp('next_index_attempt', { withTimezone: true }),
 
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
 	},

@@ -1,11 +1,13 @@
 import type { Handle } from '@sveltejs/kit';
 import { startPolling } from '$lib/server/music/lastfm-poller';
+import { startReindexer } from '$lib/server/music/reindexer';
 import { building } from '$app/environment';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { auth } from '$lib/server/auth';
 
 if (!building) {
 	startPolling();
+	startReindexer();
 }
 
 export const handle: Handle = async ({ event, resolve }) => {

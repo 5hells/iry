@@ -5,6 +5,7 @@ import { indexAlbumFromMusicBrainz, indexAlbumFromDiscogs, indexAlbumFromSpotify
 import * as musicbrainz from './musicbrainz';
 import * as discogs from './discogs';
 
+
 const RETRY_INTERVAL_MS = 3 * 60 * 1000;
 const MAX_RETRIES = 6;
 
@@ -119,9 +120,56 @@ async function processArtist(ar: any) {
                         const tracks = await db.select().from(track).where(eq(track.albumId, resolved.id));
                         if (tracks.length > 0) {
                             success = true;
+                            continue;
+                        }
+                        if (rg && rg.title) {
+                            try {
+                                const query = `${mbArtist.name} ${rg.title}`;
+                                const results = await discogs.searchReleases(query, 'release');
+                                if (results && results.length > 0) {
+                                    for (const cand of results.slice(0, 5)) {
+                                        try {
+                                            if (!cand || !cand.id) continue;
+                                            const dc = await indexAlbumFromDiscogs(String(cand.id));
+                                            const dctracks = await db.select().from(track).where(eq(track.albumId, dc.id));
+                                            if (dctracks.length > 0) {
+                                                success = true;
+                                                break;
+                                            }
+                                        } catch (e) {
+                                            console.warn('Discogs candidate indexing failed for', cand?.id, e);
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Discogs fallback for artist release-group failed', rg?.id, e);
+                            }
                         }
                     } catch (err) {
                         console.warn('Failed to index artist release-group', rg?.id, err);
+                        try {
+                            if (rg && rg.title) {
+                                const query = `${mbArtist.name} ${rg.title}`;
+                                const results = await discogs.searchReleases(query, 'release');
+                                if (results && results.length > 0) {
+                                    for (const cand of results.slice(0, 5)) {
+                                        try {
+                                            if (!cand || !cand.id) continue;
+                                            const dc = await indexAlbumFromDiscogs(String(cand.id));
+                                            const dctracks = await db.select().from(track).where(eq(track.albumId, dc.id));
+                                            if (dctracks.length > 0) {
+                                                success = true;
+                                                break;
+                                            }
+                                        } catch (e) {
+                                            console.warn('Discogs candidate indexing failed for', cand?.id, e);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (discErr) {
+                            console.warn('Discogs fallback search failed for artist release-group', rg?.id, discErr);
+                        }
                     }
                 }
             } catch (err) {
@@ -137,6 +185,7 @@ async function processArtist(ar: any) {
         }
     }
 }
+
 
 export function startReindexer() {
     if (running) return;

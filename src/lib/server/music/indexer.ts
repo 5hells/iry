@@ -353,6 +353,11 @@ export async function indexAlbumFromMusicBrainz(musicbrainzId: string) {
 		}
 	}
 	if (!mbRelease) {
+		try {
+			const fallbackQuery = musicbrainzId;
+		} catch (err) {
+			console.warn('Discogs fallback search failed while MB release missing:', err);
+		}
 		throw new Error('Release not found on MusicBrainz');
 	}
 
@@ -426,6 +431,23 @@ export async function indexAlbumFromMusicBrainz(musicbrainzId: string) {
 	}
 
 	const mbTracks = extractMusicBrainzTracks(mbRelease);
+
+	if ((!mbTracks || mbTracks.length === 0) && mbRelease && artistName) {
+		try {
+			const query = `${artistName} ${mbRelease.title}`;
+			const discogsResults = await discogs.searchReleases(query, 'release');
+			if (discogsResults && discogsResults.length > 0 && discogsResults[0].id) {
+				try {
+					const dc = await indexAlbumFromDiscogs(String(discogsResults[0].id));
+					if (dc) return dc;
+				} catch (err) {
+					console.warn('Discogs fallback indexing failed for', query, err);
+				}
+			}
+		} catch (err) {
+			console.warn('Error searching Discogs as fallback for MB release:', err);
+		}
+	}
 	if (mbTracks.length > 0) {
 		const tracksToInsert = mbTracks.map((t, idx) => ({
 			albumId: newAlbum.id,

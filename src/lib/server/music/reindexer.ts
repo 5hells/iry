@@ -3,8 +3,9 @@ import { album, artist, track } from '$lib/server/db/schema';
 import { sql, eq } from 'drizzle-orm';
 import { indexAlbumFromMusicBrainz, indexAlbumFromDiscogs, indexAlbumFromSpotify } from './indexer';
 import * as musicbrainz from './musicbrainz';
+import * as discogs from './discogs';
 
-const RETRY_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
+const RETRY_INTERVAL_MS = 3 * 60 * 1000;
 const MAX_RETRIES = 6;
 
 let running = false;
@@ -25,8 +26,33 @@ async function processAlbum(a: any) {
                 const tracks = await db.select().from(track).where(eq(track.albumId, resolved.id));
                 if (tracks.length > 0) success = true;
             } catch (err) {
-                // fall through to other fallbacks
                 console.warn('MB index attempt failed for album', a.id, err);
+                try {
+                    const title = a.title || '';
+                    const artistName = a.artist || '';
+                    if (title && artistName) {
+                        const query = `${artistName} ${title}`;
+                        const results = await discogs.searchReleases(query, 'release');
+                        if (results && results.length > 0) {
+                            const candidates = results.slice(0, 5);
+                            for (const cand of candidates) {
+                                try {
+                                    if (!cand || !cand.id) continue;
+                                    const resolved = await indexAlbumFromDiscogs(String(cand.id));
+                                    const tracks = await db.select().from(track).where(eq(track.albumId, resolved.id));
+                                    if (tracks.length > 0) {
+                                        success = true;
+                                        break;
+                                    }
+                                } catch (e) {
+                                    console.warn('Discogs candidate indexing failed for', cand?.id, e);
+                                }
+                            }
+                        }
+                    }
+                } catch (discErr) {
+                    console.warn('Discogs fallback search failed for album', a.id, discErr);
+                }
             }
         }
 
@@ -51,7 +77,6 @@ async function processAlbum(a: any) {
         }
 
         if (!success) {
-            // If we have a musicbrainz URL that looks like a release-group, try resolving via MB
             if (a.musicbrainzUrl) {
                 try {
                     const m = String(a.musicbrainzUrl).match(/release-group\/(\w[-\w]*)/i);
@@ -94,7 +119,6 @@ async function processArtist(ar: any) {
                         const tracks = await db.select().from(track).where(eq(track.albumId, resolved.id));
                         if (tracks.length > 0) {
                             success = true;
-                            // continue indexing other releases but mark success
                         }
                     } catch (err) {
                         console.warn('Failed to index artist release-group', rg?.id, err);
@@ -120,7 +144,6 @@ export function startReindexer() {
 
     async function tick() {
         try {
-            // Albums with zero tracks or totalTracks=0
             const candidates = await db.select().from(album).where(sql`COALESCE(total_tracks,0) = 0`).limit(100);
             const now = new Date();
             for (const a of candidates) {
@@ -129,18 +152,14 @@ export function startReindexer() {
                 if (retryCount >= MAX_RETRIES) continue;
                 if (nextAttempt && nextAttempt > now) continue;
 
-                // double-check there are truly no tracks
                 const tracks = await db.select().from(track).where(eq(track.albumId, a.id));
                 if (tracks.length === 0) {
-                    // process in background (sequential to avoid rate limits)
                     await processAlbum(a);
                 } else {
-                    // if tracks appeared since, clear retry
                     await db.update(album).set({ indexRetryCount: 0, nextIndexAttempt: null }).where(eq(album.id, a.id));
                 }
             }
 
-            // Artists: attempt if retry conditions match
             const artistCandidates = await db.select().from(artist).limit(50);
             for (const ar of artistCandidates) {
                 const retryCount = Number(ar.indexRetryCount || 0);
@@ -148,7 +167,6 @@ export function startReindexer() {
                 if (retryCount >= MAX_RETRIES) continue;
                 if (nextAttempt && nextAttempt > now) continue;
 
-                // crude heuristic: reindex artists that have few or zero albums matching their name
                 const artistAlbums = await db.select().from(album).where(sql`album.artist ILIKE ${ar.name}`).limit(1);
                 if (!artistAlbums || artistAlbums.length === 0) {
                     await processArtist(ar);
@@ -159,12 +177,10 @@ export function startReindexer() {
         } catch (err) {
             console.error('Reindexer tick failed:', err);
         } finally {
-            // schedule next tick after 60s
             setTimeout(tick, 60 * 1000);
         }
     }
 
-    // initial run
     tick().catch((e) => console.error('Reindexer startup error:', e));
 }
 
